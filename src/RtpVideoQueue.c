@@ -95,11 +95,11 @@ static void reportFinalFrameFecStatus(PRTP_VIDEO_QUEUE queue) {
     fecStatus.frameIndex = BE32(queue->currentFrameNumber);
     fecStatus.highestReceivedSequenceNumber = BE16(queue->receivedHighestSequenceNumber);
     fecStatus.nextContiguousSequenceNumber = BE16(queue->nextContiguousSequenceNumber);
-    fecStatus.missingPacketsBeforeHighestReceived = (uint8_t)queue->missingPackets;
-    fecStatus.totalDataPackets = (uint8_t)queue->bufferDataPackets;
-    fecStatus.totalParityPackets = (uint8_t)queue->bufferParityPackets;
-    fecStatus.receivedDataPackets = (uint8_t)queue->receivedDataPackets;
-    fecStatus.receivedParityPackets = (uint8_t)queue->receivedParityPackets;
+    fecStatus.missingPacketsBeforeHighestReceived = BE16(queue->missingPackets);
+    fecStatus.totalDataPackets = BE16(queue->bufferDataPackets);
+    fecStatus.totalParityPackets = BE16(queue->bufferParityPackets);
+    fecStatus.receivedDataPackets = BE16(queue->receivedDataPackets);
+    fecStatus.receivedParityPackets = BE16(queue->receivedParityPackets);
     fecStatus.fecPercentage = (uint8_t)queue->fecPercentage;
     fecStatus.multiFecBlockIndex = (uint8_t)queue->multiFecCurrentBlockNumber;
     fecStatus.multiFecBlockCount = (uint8_t)(queue->multiFecLastBlockNumber + 1);
@@ -459,7 +459,7 @@ static void stageCompleteFecBlock(PRTP_VIDEO_QUEUE queue) {
 
         unsigned int lowestRtpSequenceNumber = entry->packet->sequenceNumber;
 
-        while (entry != NULL) {
+        do {
             // We should never encounter a packet that's lower than our next seq num
             LC_ASSERT(!isBefore16(entry->packet->sequenceNumber, nextSeqNum));
 
@@ -499,7 +499,7 @@ static void stageCompleteFecBlock(PRTP_VIDEO_QUEUE queue) {
             }
 
             entry = entry->next;
-        }
+        } while (entry != NULL);
 
         if (entry == NULL) {
             // Start at the lowest we found last enumeration
@@ -537,6 +537,11 @@ int RtpvAddPacket(PRTP_VIDEO_QUEUE queue, PRTP_PACKET packet, int length, PRTPV_
     int dataOffset = sizeof(*packet);
     if (packet->header & FLAG_EXTENSION) {
         dataOffset += 4; // 2 additional fields
+    }
+
+    if (length < dataOffset + (int)sizeof(NV_VIDEO_PACKET)) {
+        // Reject packets that are too small to fit a NV_VIDEO_PACKET header
+        return RTPF_RET_REJECTED;
     }
 
     PNV_VIDEO_PACKET nvPacket = (PNV_VIDEO_PACKET)(((char*)packet) + dataOffset);
